@@ -1,0 +1,116 @@
+# syntax=docker/dockerfile:1
+# check=skip=InvalidDefaultArgInFrom
+
+# Installed NeMo version: 2.4.0 (== 2.4.0rc3)
+# Please find the official doc to see the installed versions.
+# # https://docs.nvidia.com/nemo-framework/user-guide/latest/softwarecomponentversions.html
+# ARG BASE_IMAGE_WITH_TAG=pytorch/pytorch:2.7.1-cuda11.8-cudnn9-devel
+
+# FROM ${BASE_IMAGE_WITH_TAG} AS base
+
+# # Alternative user
+# ARG USER_ID=0
+# ARG USER_NAME=root
+# ARG GROUP_ID=0
+# ARG GROUP_NAME=root
+
+# RUN (getent group ${GROUP_ID} || groupadd --gid ${GROUP_ID} ${GROUP_NAME}) && \
+#     (getent passwd ${USER_ID} || useradd --gid ${GROUP_ID} --uid ${USER_ID} --create-home --no-log-init --shell /bin/bash ${USER_NAME}) && \
+#     if [ -d /app ]; then chown ${USER_ID}:${GROUP_ID} /app; fi && \
+#     apt-get update && \
+#     apt-get install -y sudo && \
+#     adduser ${USER_NAME} sudo && \
+#     echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
+#     apt-get clean && \
+#     rm -rf /var/lib/apt/lists/*
+
+# USER ${USER_NAME}
+
+# ENV PATH="/home/${USER_NAME}/.local/bin:$PATH"
+
+# WORKDIR /workspace
+########3
+# syntax=docker/dockerfile:1
+# check=skip=InvalidDefaultArgInFrom
+
+# CUDA 11.8 + cuDNN9 + 개발툴 포함 (devel)
+# ARG BASE_IMAGE_WITH_TAG=pytorch/pytorch:2.7.1-cuda11.8-cudnn9-devel
+ARG BASE_IMAGE_WITH_TAG=nvidia/cuda:11.8.0-devel-ubuntu22.04
+
+FROM ${BASE_IMAGE_WITH_TAG} AS base
+
+# bash를 기본 쉘로 사용 (micromamba 쓸 때 편함)
+SHELL ["/bin/bash", "-lc"]
+
+# -----------------------------
+# 유저 설정 (make-and-run-docker.sh에서 넘어옴)
+# -----------------------------
+ARG USER_ID=0
+ARG USER_NAME=root
+ARG GROUP_ID=0
+ARG GROUP_NAME=root
+
+RUN (getent group ${GROUP_ID} || groupadd --gid ${GROUP_ID} ${GROUP_NAME}) && \
+    (getent passwd ${USER_ID} || useradd --gid ${GROUP_ID} --uid ${USER_ID} \
+        --create-home --no-log-init --shell /bin/bash ${USER_NAME}) && \
+    if [ -d /app ]; then chown ${USER_ID}:${GROUP_ID} /app; fi && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        sudo \
+        git \
+        wget \
+        ca-certificates \
+        bzip2 \
+        build-essential \
+    && \
+    adduser ${USER_NAME} sudo && \
+    echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# -----------------------------
+# micromamba 설치 (공식 패턴)
+# -----------------------------
+ENV MAMBA_ROOT_PREFIX=/opt/micromamba
+ENV PATH=/usr/local/bin:${MAMBA_ROOT_PREFIX}/bin:$PATH
+
+RUN mkdir -p "${MAMBA_ROOT_PREFIX}" && \
+    mkdir -p /usr/local/bin && \
+    wget -qO- https://micro.mamba.pm/api/micromamba/linux-64/latest | \
+      tar -xvj -C /usr/local/bin --strip-components=1 bin/micromamba && \
+    micromamba --version
+
+WORKDIR /workspace
+
+# -----------------------------
+# environment.yml로 env 생성
+# -----------------------------
+# 빌드 컨텍스트가 리포 루트이므로, root의 environment.yml을 그대로 사용
+COPY environment.yml /tmp/environment.yml
+
+RUN micromamba create -y -n flow_matching -f /tmp/environment.yml && \
+    micromamba clean --all --yes
+
+# -----------------------------
+# 코드 복사 + editable 설치
+# -----------------------------
+COPY . /workspace
+
+RUN micromamba run -n flow_matching pip install -e .
+
+
+RUN micromamba run -n flow_matching pip install -r examples/image/requirements.txt
+
+
+# bash 들어오면 자동으로 env 활성화
+RUN echo 'eval "$(micromamba shell hook -s bash)" && micromamba activate flow_matching' \
+    >> /home/${USER_NAME}/.bashrc && \
+    chown -R ${USER_ID}:${GROUP_ID} /workspace /home/${USER_NAME}
+
+# -----------------------------
+# 유저 전환 + 기본 CMD
+# -----------------------------
+USER ${USER_NAME}
+WORKDIR /workspace
+
+CMD ["bash"]
