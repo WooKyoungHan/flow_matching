@@ -154,6 +154,9 @@ def get_args_parser():
         "--eval_only", action="store_true", help="No training, only run evaluation"
     )
     parser.add_argument(
+        "--hhd", action="store_true", help="hhd will be activated"
+    )
+    parser.add_argument(
         "--eval_frequency",
         default=50,
         type=int,

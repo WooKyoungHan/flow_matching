@@ -73,9 +73,17 @@ def parse_args():
 def get_shared_folder(shared_dir: str) -> Path:
     user = os.getenv("USER")
     if Path(shared_dir).is_dir():
-        p = Path(shared_dir) / user / "experiments"
+        if user is not None:
+            p = Path(shared_dir) / user / "experiments"
+        else:
+            p = Path(shared_dir) / "experiments"
         p.mkdir(exist_ok=True)
         return p
+    #     user = os.getenv("USER")
+    # if Path(shared_dir).is_dir():
+    #     p = Path('/workspace/checkpoint/experiments')
+    #     p.mkdir(exist_ok=True)
+    #     return p
     raise RuntimeError("No shared folder available")
 
 

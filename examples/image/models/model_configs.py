@@ -7,7 +7,7 @@ from typing import Union
 
 from models.discrete_unet import DiscreteUNetModel
 from models.ema import EMA
-from models.unet import UNetModel
+from models.unet import UNetModel, HHD_Module
 
 MODEL_CONFIGS = {
     "imagenet": {
@@ -64,6 +64,46 @@ MODEL_CONFIGS = {
         "use_new_attention_order": True,
         "with_fourier_features": False,
     },
+    "cifar10_half": {
+        "in_channels": 3,
+        "model_channels": 128,              # 128 -> 90: 파라미터 ≈ 1/2
+        "out_channels": 1,
+        "num_res_blocks": 3,               # 그대로 유지 (깊이 유지)
+        "attention_resolutions": [2],
+        "dropout": 0.3,
+        "channel_mult": [2, 2, 2],         # 그대로
+        "conv_resample": False,
+        "dims": 2,
+        "num_classes": None,
+        "use_checkpoint": False,
+        "num_heads": 1,
+        "num_head_channels": -1,
+        "num_heads_upsample": -1,
+        "use_scale_shift_norm": True,
+        "resblock_updown": False,
+        "use_new_attention_order": True,
+        "with_fourier_features": False,
+    },
+    "aux": {
+        "in_channels": 3,
+        "model_channels": 128,              # 128 -> 90: 파라미터 ≈ 1/2
+        "out_channels": 1,
+        "num_res_blocks": 1,               # 그대로 유지 (깊이 유지)
+        "attention_resolutions": [2],
+        "dropout": 0.3,
+        "channel_mult": [2, 2, 2],         # 그대로
+        "conv_resample": False,
+        "dims": 2,
+        "num_classes": None,
+        "use_checkpoint": False,
+        "num_heads": 1,
+        "num_head_channels": -1,
+        "num_heads_upsample": -1,
+        "use_scale_shift_norm": True,
+        "resblock_updown": False,
+        "use_new_attention_order": True,
+        "with_fourier_features": False,
+    },
     "cifar10_discrete": {
         "in_channels": 3,
         "model_channels": 96,
@@ -86,10 +126,9 @@ MODEL_CONFIGS = {
     },
 }
 
-
 def instantiate_model(
-    architechture: str, is_discrete: bool, use_ema: bool
-) -> Union[UNetModel, DiscreteUNetModel]:
+    architechture: str, is_discrete: bool, use_ema: bool, hhd:bool = False
+) -> Union[UNetModel, DiscreteUNetModel,HHD_Module]:
     assert (
         architechture in MODEL_CONFIGS
     ), f"Model architecture {architechture} is missing its config."
@@ -104,7 +143,13 @@ def instantiate_model(
             **config,
         )
     else:
-        model = UNetModel(**MODEL_CONFIGS[architechture])
+        if hhd:
+            if architechture + "_half" in MODEL_CONFIGS:
+                model = HHD_Module(MODEL_CONFIGS[architechture + "_half"],MODEL_CONFIGS['aux'])
+            print("HHD activated")
+        else:
+            model = UNetModel(**MODEL_CONFIGS[architechture])
+            
 
     if use_ema:
         return EMA(model=model)

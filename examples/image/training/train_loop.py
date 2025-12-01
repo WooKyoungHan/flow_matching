@@ -98,7 +98,8 @@ def train_one_epoch(
             u_t = path_sample.dx_t
 
             with torch.cuda.amp.autocast():
-                loss = torch.pow(model(x_t, t, extra=conditioning) - u_t, 2).mean()
+                u_pred,u_curl = model(x_t, t, extra=conditioning)
+                loss = torch.pow(u_pred - u_t, 2).mean() + 0.3* torch.norm(u_curl, p=2) ** 2
 
         loss_value = loss.item()
         batch_loss.update(loss)
