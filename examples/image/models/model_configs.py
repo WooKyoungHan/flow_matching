@@ -7,7 +7,7 @@ from typing import Union
 
 from models.discrete_unet import DiscreteUNetModel
 from models.ema import EMA
-from models.unet import UNetModel, HHD_Module
+from models.unet import HHD_Module, UNetModel
 
 MODEL_CONFIGS = {
     "imagenet": {
@@ -66,12 +66,12 @@ MODEL_CONFIGS = {
     },
     "cifar10_half": {
         "in_channels": 3,
-        "model_channels": 128,              # 128 -> 90: 파라미터 ≈ 1/2
+        "model_channels": 128,  # 128 -> 90: 파라미터 ≈ 1/2
         "out_channels": 1,
-        "num_res_blocks": 3,               # 그대로 유지 (깊이 유지)
+        "num_res_blocks": 3,  # 그대로 유지 (깊이 유지)
         "attention_resolutions": [2],
         "dropout": 0.3,
-        "channel_mult": [2, 2, 2],         # 그대로
+        "channel_mult": [2, 2, 2],  # 그대로
         "conv_resample": False,
         "dims": 2,
         "num_classes": None,
@@ -86,12 +86,12 @@ MODEL_CONFIGS = {
     },
     "aux": {
         "in_channels": 3,
-        "model_channels": 128,              # 128 -> 90: 파라미터 ≈ 1/2
+        "model_channels": 128,  # 128 -> 90: 파라미터 ≈ 1/2
         "out_channels": 1,
-        "num_res_blocks": 1,               # 그대로 유지 (깊이 유지)
+        "num_res_blocks": 1,  # 그대로 유지 (깊이 유지)
         "attention_resolutions": [2],
         "dropout": 0.3,
-        "channel_mult": [2, 2, 2],         # 그대로
+        "channel_mult": [2, 2, 2],  # 그대로
         "conv_resample": False,
         "dims": 2,
         "num_classes": None,
@@ -126,9 +126,10 @@ MODEL_CONFIGS = {
     },
 }
 
+
 def instantiate_model(
-    architechture: str, is_discrete: bool, use_ema: bool, hhd:bool = False
-) -> Union[UNetModel, DiscreteUNetModel,HHD_Module]:
+    architechture: str, is_discrete: bool, use_ema: bool, hhd: bool = False
+) -> Union[UNetModel, DiscreteUNetModel, HHD_Module]:
     assert (
         architechture in MODEL_CONFIGS
     ), f"Model architecture {architechture} is missing its config."
@@ -145,11 +146,12 @@ def instantiate_model(
     else:
         if hhd:
             if architechture + "_half" in MODEL_CONFIGS:
-                model = HHD_Module(MODEL_CONFIGS[architechture + "_half"],MODEL_CONFIGS['aux'])
+                model = HHD_Module(
+                    MODEL_CONFIGS[architechture + "_half"], MODEL_CONFIGS["aux"]
+                )
             print("HHD activated")
         else:
             model = UNetModel(**MODEL_CONFIGS[architechture])
-            
 
     if use_ema:
         return EMA(model=model)

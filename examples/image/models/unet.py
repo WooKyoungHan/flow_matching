@@ -725,7 +725,10 @@ def base2_fourier_features(
     h = w[:, :, None, None] * h
     h = torch.cat([torch.sin(h), torch.cos(h)], dim=1)
     return h
+
+
 ##########
+
 
 class SkewSymmetricApply(nn.Module):
     def __init__(self, n=3072):
@@ -738,67 +741,67 @@ class SkewSymmetricApply(nn.Module):
         # thetas 그대로 유지 (orthogonal 회전)
         self.thetas = nn.Parameter(torch.zeros(n // 2))  # per 2D block
 
-    def apply_Q(self, x):         # x: (B, n)
+    def apply_Q(self, x):  # x: (B, n)
         B, n = x.shape
         x2 = x.view(B, n // 2, 2)
         c = torch.cos(self.thetas).view(1, -1, 1)
         s = torch.sin(self.thetas).view(1, -1, 1)
         # [c -s; s c]
-        y0 =  c * x2[..., 0:1] - s * x2[..., 1:2]
-        y1 =  s * x2[..., 0:1] + c * x2[..., 1:2]
+        y0 = c * x2[..., 0:1] - s * x2[..., 1:2]
+        y1 = s * x2[..., 0:1] + c * x2[..., 1:2]
         return torch.cat([y0, y1], dim=-1).reshape(B, n)
 
-    def apply_QT(self, x):        # Q^T = Q(-theta)
+    def apply_QT(self, x):  # Q^T = Q(-theta)
         B, n = x.shape
         x2 = x.view(B, n // 2, 2)
         c = torch.cos(self.thetas).view(1, -1, 1)
         s = torch.sin(self.thetas).view(1, -1, 1)
         # [c s; -s c]
-        y0 =  c * x2[..., 0:1] + s * x2[..., 1:2]
+        y0 = c * x2[..., 0:1] + s * x2[..., 1:2]
         y1 = -s * x2[..., 0:1] + c * x2[..., 1:2]
         return torch.cat([y0, y1], dim=-1).reshape(B, n)
 
     def returnS(self, dense: bool = False, device=None, dtype=None):
         dev = device if device is not None else self.betas.device
-        dtp = dtype  if dtype  is not None else torch.float32
+        dtp = dtype if dtype is not None else torch.float32
 
-        beta = self.betas.to(dev, dtp)         # (n//2,)
+        beta = self.betas.to(dev, dtp)  # (n//2,)
         if not dense:
-            return beta                        # 각 2D 블록의 β들
+            return beta  # 각 2D 블록의 β들
 
         n2 = self.n // 2
         J = torch.zeros(self.n, self.n, device=dev, dtype=dtp)
         for k in range(n2):
             i = 2 * k
             b = beta[k]
-            J[i,   i+1] =  b
-            J[i+1, i  ] = -b
+            J[i, i + 1] = b
+            J[i + 1, i] = -b
         return J
-
 
     def forward(self, x):
         batch, channel, height, width = x.shape
-        x_flat = x.reshape(batch, -1)          # (B, n)
+        x_flat = x.reshape(batch, -1)  # (B, n)
 
         # Q^T u
-        u = self.apply_QT(x_flat)             # (B, n)
-        u2 = u.view(u.size(0), -1, 2)         # (B, n//2, 2)
+        u = self.apply_QT(x_flat)  # (B, n)
+        u2 = u.view(u.size(0), -1, 2)  # (B, n//2, 2)
 
         # β: (n//2,) -> (1, n//2, 1) -> (B, n//2, 1)
         beta = self.betas.view(1, -1, 1).to(u2).expand(u2.size(0), -1, 1)
 
         # J block: [[0, β], [-β, 0]] @ [u0; u1] = [β*u1; -β*u0]
-        y0 =  beta * u2[..., 1:2]
+        y0 = beta * u2[..., 1:2]
         y1 = -beta * u2[..., 0:1]
-        y  = torch.cat([y0, y1], dim=-1).reshape(u.shape)   # (B, n)
+        y = torch.cat([y0, y1], dim=-1).reshape(u.shape)  # (B, n)
 
         # Q y
-        w  = self.apply_Q(y)                                # (B, n)
+        w = self.apply_Q(y)  # (B, n)
         return w.reshape(batch, channel, height, width)
+
 
 # class HHD_Module(nn.Module):
 #     def __init__(self,unet_cfg):
-#         super().__init__() 
+#         super().__init__()
 #         self.unet1 = UNetModel(**unet_cfg)
 #         self.unet2 = UNetModel(**unet_cfg)
 #         self.skew_sym = SkewSymmetricApply()
@@ -809,7 +812,7 @@ class SkewSymmetricApply(nn.Module):
 #         dVdx = torch.autograd.grad(
 #             h1.sum(), x_req,
 #             create_graph=True,   # 2차 미분이 필요하면 True 유지
-#             retain_graph=True, 
+#             retain_graph=True,
 #         )[0]
 #         return -dVdx
 
@@ -830,7 +833,7 @@ class SkewSymmetricApply(nn.Module):
 #         h2 = self.grad_V(x, timesteps, extra)
 #         return h1+h2
 class HHD_Module(nn.Module):
-    def __init__(self, unet_cfg1,unet_cfg2):
+    def __init__(self, unet_cfg1, unet_cfg2):
         super().__init__()
         self.unet1 = UNetModel(**unet_cfg1)
         self.unet2 = UNetModel(**unet_cfg2)
@@ -842,9 +845,10 @@ class HHD_Module(nn.Module):
             x_req = x.detach().requires_grad_(True)
             h1 = self.unet1(x_req, timesteps, extra)
             dVdx = torch.autograd.grad(
-                h1.sum(), x_req,
-                create_graph=True,    # 2차 그래프 생성
-                retain_graph=True,    # 바깥 backward에서 다시 쓸 거라 유지
+                h1.sum(),
+                x_req,
+                create_graph=True,  # 2차 그래프 생성
+                retain_graph=True,  # 바깥 backward에서 다시 쓸 거라 유지
             )[0]
             return -dVdx
         else:
@@ -853,7 +857,8 @@ class HHD_Module(nn.Module):
                 x_req = x.detach().requires_grad_(True)
                 h1 = self.unet1(x_req, timesteps, extra)
                 dVdx = torch.autograd.grad(
-                    h1.sum(), x_req,
+                    h1.sum(),
+                    x_req,
                     create_graph=False,
                     retain_graph=False,
                 )[0]
@@ -864,7 +869,8 @@ class HHD_Module(nn.Module):
             x_req = x.detach().requires_grad_(True)
             h2 = self.unet2(x_req, timesteps, extra)
             dBdx = torch.autograd.grad(
-                h2.sum(), x_req,
+                h2.sum(),
+                x_req,
                 create_graph=True,
                 retain_graph=True,
             )[0]
@@ -874,7 +880,8 @@ class HHD_Module(nn.Module):
                 x_req = x.detach().requires_grad_(True)
                 h2 = self.unet2(x_req, timesteps, extra)
                 dBdx = torch.autograd.grad(
-                    h2.sum(), x_req,
+                    h2.sum(),
+                    x_req,
                     create_graph=False,
                     retain_graph=False,
                 )[0]
@@ -884,6 +891,6 @@ class HHD_Module(nn.Module):
         h1 = self.grad_V(x, timesteps, extra)
         h2 = self.grad_B(x, timesteps, extra)
         if self.training:
-            return h1 + h2,h2
+            return h1 + h2, h2
         else:
-            return h1 + 0*h2
+            return h1 + 0 * h2
